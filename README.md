@@ -64,20 +64,10 @@ npm install
 npm start                      # adjust to your start script
 ```
 
-## Roadmap
-
-- [x] 1. Schema, ingestion, search inspector
-- [ ] 2.
-- [ ] 3. LLM answers with citations
-- [ ] 4.
-- [ ] 5.
-- [ ] 6.
-- [ ] 7.
-
 ## Tech stack
 
 Python · TypeScript · Supabase (Postgres, pgvector, full-text search)
 
 ## License
 
-Copyright (c) [2026] [ZackDev]
+Copyright (c) 2026 ZackDev
