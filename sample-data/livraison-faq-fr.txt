@@ -1,0 +1,19 @@
+Atlas Home Store - FAQ Livraison et Paiement
+
+Quels sont les délais de livraison ?
+Pour Casablanca, Rabat, Marrakech et Agadir, la livraison prend 2 à 3 jours ouvrables. Pour les autres villes du Maroc, comptez 3 à 5 jours ouvrables. Les délais commencent après la confirmation de la commande.
+
+Combien coûte la livraison ?
+La livraison est gratuite pour toute commande supérieure à 400 DH. En dessous de ce montant, les frais de livraison sont de 35 DH pour les grandes villes et de 49 DH pour le reste du pays.
+
+Puis-je payer à la livraison ?
+Oui, le paiement à la livraison est disponible pour toutes les commandes jusqu'à 3 000 DH. Le paiement par carte bancaire est également accepté sur le site. Nous acceptons les cartes Visa et Mastercard émises au Maroc et à l'étranger.
+
+Comment suivre ma commande ?
+Dès l'expédition, vous recevez un SMS avec un numéro de suivi. Vous pouvez aussi écrire à support@atlashome.example en indiquant votre numéro de commande.
+
+Que faire si je suis absent lors de la livraison ?
+Le livreur essaie de vous joindre par téléphone et repasse le lendemain. Après deux tentatives sans succès, la commande est retournée à notre entrepôt et nous vous contactons pour organiser une nouvelle livraison.
+
+Livrez-vous en dehors du Maroc ?
+Pour le moment, nous livrons uniquement au Maroc.

@@ -1,0 +1,9 @@
+fastapi>=0.115
+uvicorn[standard]>=0.30
+python-multipart>=0.0.9
+pydantic-settings>=2.4
+supabase>=2.9
+openai>=1.50
+pypdf>=5.0
+python-docx>=1.1
+langdetect>=1.0.9

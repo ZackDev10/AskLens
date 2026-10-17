@@ -1,0 +1,15 @@
+@import "tailwindcss";
+
+@theme {
+  /* Define your custom color palette here */
+  --color-background: #0f1115;
+  --color-surface: #1e2128;
+  --color-primary: #3b82f6;
+}
+
+body {
+  /* Apply the dark theme to the whole app */
+  background-color: var(--color-background);
+  color: #e5e7eb; /* Equivalent to gray-200 */
+  -webkit-font-smoothing: antialiased;
+}
