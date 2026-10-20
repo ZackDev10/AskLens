@@ -20,6 +20,6 @@ async def health_check():
     return {"status": "ok"}
 
 # Register all routes cleanly
-app.include_router(documents.router, tags=["Documents"])
-app.include_router(retrieval_router, tags=["Search"])
-app.include_router(chat_router, tags=["Chat"])
+app.include_router(documents.router, prefix="/api", tags=["Documents"])
+app.include_router(retrieval_router, prefix="/api", tags=["Search"])
+app.include_router(chat_router, prefix="/api", tags=["Chat"])
