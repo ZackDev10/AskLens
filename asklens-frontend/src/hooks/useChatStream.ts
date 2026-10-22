@@ -9,6 +9,12 @@ export function useChatStream() {
   const sendMessage = async (query: string) => {
     if (!query.trim()) return;
 
+    // Capture the current conversation history before adding the new query
+    // Filter out any error messages to prevent breaking the backend format
+    const historyPayload = messages
+      .filter((msg) => msg.role !== 'error')
+      .map((msg) => ({ role: msg.role, content: msg.content }));
+
     // Immediately add the user's query and an empty assistant placeholder to the UI
     setMessages((prev) => [
       ...prev,
@@ -25,7 +31,8 @@ export function useChatStream() {
       const response = await fetch(`${import.meta.env.VITE_API_URL}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query }),
+        // Inject the mapped history into the JSON body
+        body: JSON.stringify({ query, history: historyPayload }),
         signal: abortController.signal,
       });
 
@@ -37,55 +44,52 @@ export function useChatStream() {
       let buffer = '';
 
       // The core stream loop
-        // The core stream loop
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
 
-            // Decode the raw bytes and append to our buffer
-            buffer += decoder.decode(value, { stream: true });
+        // Decode the raw bytes and append to our buffer
+        buffer += decoder.decode(value, { stream: true });
 
-            // FIX: Use Regex to split on either \r\n\r\n (Windows) OR \n\n (Linux/Mac)
-            const parts = buffer.split(/\r?\n\r?\n/);
+        // Split on either \r\n\r\n (Windows) OR \n\n (Linux/Mac)
+        const parts = buffer.split(/\r?\n\r?\n/);
 
-            // Pop the last element (which might be an incomplete chunk) back into the buffer
-            buffer = parts.pop() || '';
+        // Pop the last element (which might be an incomplete chunk) back into the buffer
+        buffer = parts.pop() || '';
 
-            for (const part of parts) {
-                const cleanPart = part.trim();
+        for (const part of parts) {
+          const cleanPart = part.trim();
 
-                if (cleanPart.startsWith('event: error')) {
-                    // Handle explicit error frames yielded by the backend
-                    const dataLine = cleanPart.split(/\r?\n/).find(line => line.startsWith('data:'));
-                    if (dataLine) {
-                        const errorMessage = dataLine.replace(/^data:\s*/, '');
-                        setMessages(prev => {
-                            const updated = [...prev];
-                            updated[updated.length - 1] = { role: 'error', content: errorMessage };
-                            return updated;
-                        });
-                        setIsStreaming(false);
-                        return;
-                    }
-                } else if (cleanPart.startsWith('data:')) {
-                    // FIX: Extract the text tokens properly, even if Gemini sends multi-line Markdown
-                    const chunkText = cleanPart
-                        .split(/\r?\n/)
-                        .map(line => line.replace(/^data:\s*/, ''))
-                        .join('\n');
-
-                    setMessages((prev) => {
-                        const updatedMessages = [...prev];
-                        const lastIndex = updatedMessages.length - 1;
-                        updatedMessages[lastIndex] = {
-                            ...updatedMessages[lastIndex],
-                            content: updatedMessages[lastIndex].content + chunkText,
-                        };
-                        return updatedMessages;
-                    });
-                }
+          if (cleanPart.startsWith('event: error')) {
+            const dataLine = cleanPart.split(/\r?\n/).find(line => line.startsWith('data:'));
+            if (dataLine) {
+              const errorMessage = dataLine.replace(/^data:\s*/, '');
+              setMessages(prev => {
+                const updated = [...prev];
+                updated[updated.length - 1] = { role: 'error', content: errorMessage };
+                return updated;
+              });
+              setIsStreaming(false);
+              return;
             }
+          } else if (cleanPart.startsWith('data:')) {
+            const chunkText = cleanPart
+              .split(/\r?\n/)
+              .map(line => line.replace(/^data:\s*/, ''))
+              .join('\n');
+
+            setMessages((prev) => {
+              const updatedMessages = [...prev];
+              const lastIndex = updatedMessages.length - 1;
+              updatedMessages[lastIndex] = {
+                ...updatedMessages[lastIndex],
+                content: updatedMessages[lastIndex].content + chunkText,
+              };
+              return updatedMessages;
+            });
+          }
         }
+      }
     } catch (error: any) {
       if (error.name !== 'AbortError') {
         console.error('Stream failure:', error);

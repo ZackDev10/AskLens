@@ -1,4 +1,3 @@
-from typing import AsyncIterator
 import asyncio
 from typing import AsyncIterator
 from fastapi import APIRouter, Depends, HTTPException
@@ -35,14 +34,7 @@ async def stream_gemini_response(
     query: str, context_chunks: list[dict]
 ) -> AsyncIterator[dict]:
 
-    # A dummy response with Markdown to test the UI parser
-    fake_text = "This is a **live stream** directly from your backend! \n\nIf you can read this, your React frontend is 100% perfect, and the bug is isolated entirely to the Google Gemini API."
-
-    # Simulate a network stream delay
-    for word in fake_text.split(" "):
-        yield {"data": word + " "}
-        await asyncio.sleep(0.05)
-
+    # Format the retrieved chunks from Supabase into a single context string
     context_text = "\n\n".join(
         f"Source (Page {chunk.get('page_number', 'N/A')}):\n{chunk.get('content', '')}"
         for chunk in context_chunks
@@ -57,8 +49,9 @@ async def stream_gemini_response(
     prompt = f"Context:\n{context_text}\n\nQuestion: {query}"
 
     try:
+        # Stream the actual response from Gemini
         response = await get_gemini().aio.models.generate_content_stream(
-            model="gemini-3.8-flash",
+            model="gemini-3.5-flash", # Note: Updated from 3.8 to a valid model version, though 1.5 is also fine
             contents=prompt,
             config=types.GenerateContentConfig(system_instruction=system_prompt),
         )
@@ -70,29 +63,23 @@ async def stream_gemini_response(
     except Exception:
         import logging
         logging.getLogger("asklens.chat").exception("chat_stream streaming failed")
-        # Yield an SSE error frame instead of crashing the already-open stream
         yield {"event": "error", "data": "Chat stream interrupted due to an upstream error."}
 
 @router.post("/chat")
 async def chat_stream(
     req: ChatRequest,
-    # TEMPORARILY COMMENT OUT DEPENDENCIES TO AVOID RAM CRASH
-    # repo: Repository = Depends(get_repo),
-    # embedder: HuggingFaceEmbedder = Depends(get_embedder),
+    # Restore dependencies so we can connect to the database and embedder
+    repo: Repository = Depends(get_repo),
+    embedder: HuggingFaceEmbedder = Depends(get_embedder),
 ):
     try:
-        # BYPASS EMBEDDER AND DB SEARCH
-        # query_vector = embedder.embed([req.query])[0]
-        # hits = repo.hybrid_search(req.query, query_vector, match_limit=5)
+        # 1. Convert the user's chat question into a vector embedding
+        query_vector = embedder.embed([req.query])[0]
 
-        # INJECT FAKE CONTEXT TO TEST FRONTEND UI
-        hits = [
-            {
-                "page_number": 1,
-                "content": "JSON (JavaScript Object Notation) is a lightweight data-interchange format. It is easy for humans to read and write, and easy for machines to parse and generate."
-            }
-        ]
+        # 2. Search Supabase for the top 5 most relevant document chunks
+        hits = repo.hybrid_search(req.query, query_vector, match_limit=5)
 
+        # 3. Pass the actual Supabase chunks into the Gemini stream
         return EventSourceResponse(stream_gemini_response(req.query, hits))
 
     except HTTPException:
