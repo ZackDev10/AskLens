@@ -1,13 +1,16 @@
 import { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { DocumentSidebar } from './components/DocumentSidebar'; // 1. Import the sidebar
+import { ChatSidebar } from './components/ChatSidebar';
+import { DocumentSidebar } from './components/DocumentSidebar';
 import { FileUploader } from './components/FileUploader';
 import { useChatStream } from './hooks/useChatStream';
 
 function App() {
   const [inputValue, setInputValue] = useState('');
-  const { messages, isStreaming, sendMessage, stopStreaming } = useChatStream();
+
+  // Extract the new functions from your updated hook
+  const { messages, isStreaming, sendMessage, stopStreaming, activeChatId, loadChat, startNewChat } = useChatStream();
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -24,13 +27,16 @@ function App() {
   };
 
   return (
-    // 2. Wrap the entire app in a flex row to place the sidebar on the left
     <div className="flex h-screen w-full bg-background">
 
-      {/* 3. Insert the sidebar component */}
-      <DocumentSidebar />
+      {/* Unified Left Sidebar Container */}
+      <div className="w-72 bg-surface border-r border-gray-800 flex flex-col h-full shrink-0">
+        <ChatSidebar activeChatId={activeChatId} loadChat={loadChat} startNewChat={startNewChat} />
+        <hr className="border-gray-800" />
+        <DocumentSidebar />
+      </div>
 
-      {/* 4. Keep your existing chat layout in the main flex-1 container */}
+      {/* Main Chat Area */}
       <div className="flex flex-col flex-1 max-w-4xl mx-auto p-4 relative">
         <header className="py-4 border-b border-gray-800 mb-4 flex justify-between items-center">
           <div>
@@ -51,17 +57,17 @@ function App() {
           {messages.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-gray-500 gap-2">
               <span className="text-lg font-medium text-gray-400">No messages yet</span>
-              <p className="text-sm">Ask a question to query your indexed documents.</p>
+              <p className="text-sm">Start a new chat to query your indexed documents.</p>
             </div>
           ) : (
             messages.map((msg, idx) => (
               <div
                 key={idx}
                 className={`p-4 rounded-xl max-w-[85%] text-sm leading-relaxed ${msg.role === 'user'
-                  ? 'bg-primary text-white ml-auto rounded-br-none'
-                  : msg.role === 'error'
-                    ? 'bg-red-950/40 text-red-200 border border-red-800/80'
-                    : 'bg-surface text-gray-200 border border-gray-800 rounded-bl-none'
+                    ? 'bg-primary text-white ml-auto rounded-br-none'
+                    : msg.role === 'error'
+                      ? 'bg-red-950/40 text-red-200 border border-red-800/80'
+                      : 'bg-surface text-gray-200 border border-gray-800 rounded-bl-none'
                   }`}
               >
                 {msg.role === 'assistant' ? (

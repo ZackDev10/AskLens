@@ -46,7 +46,7 @@ export function DocumentSidebar() {
     }, []);
 
     return (
-        <div className="w-64 bg-surface border-r border-gray-800 h-full p-4 flex flex-col">
+        <div className="w-full bg-surface border-r border-gray-800 flex-1 p-4 flex flex-col">
             <h2 className="text-lg font-bold text-gray-200 mb-4">Your Documents</h2>
 
             {isLoading ? (
