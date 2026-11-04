@@ -25,12 +25,10 @@ export function useChatStream() {
     setMessages([]);
   };
 
-  const sendMessage = async (query: string) => {
+  const sendMessage = async (query: string, selectedDocIds: string[] = []) => {
     if (!query.trim()) return;
-
     let currentChatId = activeChatId;
 
-    // 1. Create a new chat session in Supabase if one doesn't exist
     if (!currentChatId) {
       try {
         const title = query.length > 30 ? query.substring(0, 30) + '...' : query;
@@ -49,7 +47,6 @@ export function useChatStream() {
       }
     }
 
-    // 2. Save the User's message to Supabase
     if (currentChatId) {
       await fetch(`${import.meta.env.VITE_API_URL}/chats/${currentChatId}/messages`, {
         method: 'POST',
@@ -71,14 +68,17 @@ export function useChatStream() {
 
     const abortController = new AbortController();
     abortControllerRef.current = abortController;
-
     let fullAiResponse = "";
 
     try {
       const response = await fetch(`${import.meta.env.VITE_API_URL}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query, history: historyPayload }),
+        body: JSON.stringify({
+          query,
+          history: historyPayload,
+          document_ids: selectedDocIds
+        }),
         signal: abortController.signal,
       });
 
@@ -90,49 +90,69 @@ export function useChatStream() {
       let buffer = '';
 
       while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
+        const { done, value } = await reader.read();
+        if (done) break;
 
-          buffer += decoder.decode(value, { stream: true });
-          const parts = buffer.split(/\r?\n\r?\n/);
-          buffer = parts.pop() || '';
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split(/\r?\n\r?\n/);
+        buffer = parts.pop() || '';
 
-          for (const part of parts) {
-              const cleanPart = part.trim();
-              if (cleanPart.startsWith('event: error')) {
-                  const dataLine = cleanPart.split(/\r?\n/).find(line => line.startsWith('data:'));
-                  if (dataLine) {
-                      const errorMessage = dataLine.replace(/^data:\s*/, '');
-                      setMessages(prev => {
-                          const updated = [...prev];
-                          updated[updated.length - 1] = { role: 'error', content: errorMessage };
-                          return updated;
-                      });
-                      setIsStreaming(false);
-                      return;
-                  }
-              } else if (cleanPart.startsWith('data:')) {
-                  const chunkText = cleanPart
-                      .split(/\r?\n/)
-                      .map(line => line.replace(/^data:\s*/, ''))
-                      .join('\n');
-
-                  fullAiResponse += chunkText;
-
-                  setMessages((prev) => {
-                      const updatedMessages = [...prev];
-                      const lastIndex = updatedMessages.length - 1;
-                      updatedMessages[lastIndex] = {
-                          ...updatedMessages[lastIndex],
-                          content: updatedMessages[lastIndex].content + chunkText,
-                      };
-                      return updatedMessages;
-                  });
-              }
+        for (const part of parts) {
+          const cleanPart = part.trim();
+          if (cleanPart.startsWith('event: error')) {
+            const dataLine = cleanPart.split(/\r?\n/).find(line => line.startsWith('data:'));
+            if (dataLine) {
+              const errorMessage = dataLine.replace(/^data:\s*/, '');
+              setMessages(prev => {
+                const updated = [...prev];
+                updated[updated.length - 1] = { ...updated[updated.length - 1], role: 'error', content: errorMessage };
+                return updated;
+              });
+              setIsStreaming(false);
+              return;
+            }
           }
+          // --- Handle Sources Event ---
+          else if (cleanPart.startsWith('event: sources')) {
+            const dataLine = cleanPart.split(/\r?\n/).find(line => line.startsWith('data:'));
+            if (dataLine) {
+              try {
+                const sourcesJson = dataLine.replace(/^data:\s*/, '');
+                const sources = JSON.parse(sourcesJson);
+                setMessages((prev) => {
+                  const updated = [...prev];
+                  const lastIndex = updated.length - 1;
+                  updated[lastIndex] = { ...updated[lastIndex], sources } as any;
+                  return updated;
+                });
+              } catch (e) {
+                console.error("Failed to parse sources", e);
+              }
+            }
+          }
+          // --- Normal Text Stream ---
+          else if (cleanPart.startsWith('data:')) {
+            const chunkText = cleanPart
+              .split(/\r?\n/)
+              // FIX: Use / ?/ to strip at most ONE space, preserving token spaces
+              .map(line => line.replace(/^data: ?/, ''))
+              .join('\n');
+
+            fullAiResponse += chunkText;
+
+            setMessages((prev) => {
+              const updatedMessages = [...prev];
+              const lastIndex = updatedMessages.length - 1;
+              updatedMessages[lastIndex] = {
+                ...updatedMessages[lastIndex],
+                content: updatedMessages[lastIndex].content + chunkText,
+              };
+              return updatedMessages;
+            });
+          }
+        }
       }
 
-      // 3. Save the final AI response to Supabase after the stream finishes
       if (currentChatId && fullAiResponse) {
         await fetch(`${import.meta.env.VITE_API_URL}/chats/${currentChatId}/messages`, {
           method: 'POST',
@@ -146,7 +166,7 @@ export function useChatStream() {
         console.error('Stream failure:', error);
         setMessages(prev => {
           const updated = [...prev];
-          updated[updated.length - 1] = { role: 'error', content: "Connection to the server failed." };
+          updated[updated.length - 1] = { ...updated[updated.length - 1], role: 'error', content: "Connection to the server failed." };
           return updated;
         });
       }

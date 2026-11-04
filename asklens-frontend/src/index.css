@@ -1,15 +1,32 @@
-@import "tailwindcss";
+@layer base {
+  :root {
+    /* Light Theme */
+    --bg-background: #ffffff;
+    --bg-surface: #f8fafc;
+    --border-dim: #e2e8f0;
+    --text-primary: #0f172a;
+    --text-secondary: #475569;
+    --text-muted: #94a3b8;
+    --brand-primary: #3b82f6;
+    --brand-hover: #2563eb;
+  }
 
-@theme {
-  /* Define your custom color palette here */
-  --color-background: #0f1115;
-  --color-surface: #1e2128;
-  --color-primary: #3b82f6;
-}
+  .dark {
+    /* Dark Theme */
+    --bg-background: #0f1115;
+    --bg-surface: #181b21;
+    --border-dim: #272b33;
+    --text-primary: #f3f4f6;
+    --text-secondary: #9ca3af;
+    --text-muted: #6b7280;
+    --brand-primary: #3b82f6;
+    --brand-hover: #2563eb;
+  }
 
-body {
-  /* Apply the dark theme to the whole app */
-  background-color: var(--color-background);
-  color: #e5e7eb; /* Equivalent to gray-200 */
-  -webkit-font-smoothing: antialiased;
+  body {
+    background-color: var(--bg-background);
+    color: var(--text-primary);
+    -webkit-font-smoothing: antialiased;
+    transition: background-color 0.3s ease, color 0.3s ease;
+  }
 }
