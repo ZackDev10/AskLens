@@ -1,202 +1,130 @@
 import React, { useEffect, useState, useRef } from 'react';
+import { MessageSquare, MoreVertical, Plus, Trash2, Edit2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-interface Chat {
-  id: string;
-  title: string;
-  updated_at: string;
-}
+interface Chat { id: string; title: string; updated_at: string; messages: any[] }
 
 interface ChatSidebarProps {
   activeChatId: string | null;
   loadChat: (id: string) => void;
   startNewChat: () => void;
+  t: any;
 }
 
-export const ChatSidebar: React.FC<ChatSidebarProps> = ({ activeChatId, loadChat, startNewChat }) => {
+export const ChatSidebar: React.FC<ChatSidebarProps> = ({ activeChatId, loadChat, startNewChat, t }) => {
   const [chats, setChats] = useState<Chat[]>([]);
   const [menuOpenId, setMenuOpenId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const menuRef = useRef<HTMLDivElement>(null);
 
-  const fetchChats = async () => {
+  const loadStored = () => {
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/chats`);
-      const data = await res.json();
-      setChats(data || []);
-    } catch (err) {
-      console.error("Failed to load chats", err);
-    }
+      const raw = localStorage.getItem('asklens_chats');
+      if (!raw) return setChats([]);
+      const parsed = JSON.parse(raw);
+      const list = Object.values(parsed) as Chat[];
+      list.sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
+      setChats(list);
+    } catch (e) { setChats([]); }
   };
 
   useEffect(() => {
-    fetchChats();
-  }, [activeChatId]); // Refetch when chat changes to capture auto-titles
+    loadStored();
+    window.addEventListener('storage', loadStored);
+    return () => window.removeEventListener('storage', loadStored);
+  }, [activeChatId]);
 
-  // Close menu when clicking outside
   useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setMenuOpenId(null);
-      }
+    const clickOut = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setMenuOpenId(null);
     };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    document.addEventListener('mousedown', clickOut);
+    return () => document.removeEventListener('mousedown', clickOut);
   }, []);
 
-  const handleDelete = async (id: string, e: React.MouseEvent) => {
+  const saveChats = (list: Chat[]) => {
+    const obj = list.reduce((acc, c) => ({ ...acc, [c.id]: c }), {});
+    localStorage.setItem('asklens_chats', JSON.stringify(obj));
+    setChats(list);
+    window.dispatchEvent(new Event('storage'));
+  };
+
+  const handleDelete = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    try {
-      await fetch(`${import.meta.env.VITE_API_URL}/chats/${id}`, { method: 'DELETE' });
-      setChats(chats.filter(c => c.id !== id));
-      if (activeChatId === id) startNewChat();
-      toast.success("Chat deleted");
-    } catch (err) {
-      toast.error("Failed to delete chat");
-    }
+    if (!confirm('Delete this chat?')) return;
+    saveChats(chats.filter(c => c.id !== id));
+    if (activeChatId === id) startNewChat();
     setMenuOpenId(null);
   };
 
-  const handleRenameSubmit = async (id: string) => {
-    if (!editTitle.trim()) {
-      setEditingId(null);
-      return;
-    }
-    try {
-      await fetch(`${import.meta.env.VITE_API_URL}/chats/${id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: editTitle.trim() })
-      });
-      setChats(chats.map(c => c.id === id ? { ...c, title: editTitle.trim() } : c));
-      toast.success("Renamed successfully");
-    } catch (err) {
-      toast.error("Failed to rename chat");
-    }
+  const handleRename = (id: string) => {
+    if (!editTitle.trim()) { setEditingId(null); return; }
+    saveChats(chats.map(c => c.id === id ? { ...c, title: editTitle.trim() } : c));
     setEditingId(null);
     setMenuOpenId(null);
   };
 
-  // Grouping Logic
-  const categorizeChats = () => {
-    const groups: Record<string, Chat[]> = {
-      'Today': [],
-      'Yesterday': [],
-      'Previous 7 Days': [],
-      'Older': []
-    };
+  const categorize = () => {
+    const groups: Record<string, Chat[]> = { 'Today': [], 'Yesterday': [], 'Previous 7 Days': [], 'Older': [] };
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const yesterday = new Date(today); yesterday.setDate(yesterday.getDate() - 1);
+    const lastWeek = new Date(today); lastWeek.setDate(lastWeek.getDate() - 7);
 
-    const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
-    const yesterday = today - 86400000;
-    const lastWeek = today - (7 * 86400000);
-
-    chats.forEach(chat => {
-      // Use updated_at or created_at depending on your DB
-      const chatDate = new Date(chat.updated_at).getTime();
-      if (chatDate >= today) groups['Today'].push(chat);
-      else if (chatDate >= yesterday) groups['Yesterday'].push(chat);
-      else if (chatDate >= lastWeek) groups['Previous 7 Days'].push(chat);
-      else groups['Older'].push(chat);
+    chats.forEach(c => {
+      const d = new Date(c.updated_at);
+      if (d >= today) groups['Today'].push(c);
+      else if (d >= yesterday) groups['Yesterday'].push(c);
+      else if (d >= lastWeek) groups['Previous 7 Days'].push(c);
+      else groups['Older'].push(c);
     });
-
     return groups;
   };
 
-  const groupedChats = categorizeChats();
+  const groups = categorize();
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="p-4 sticky top-0 bg-surface z-10">
-        <button
-          onClick={startNewChat}
-          className="w-full flex items-center justify-between px-4 py-2.5 bg-primary/10 hover:bg-primary/20 text-primary rounded-xl transition-colors border border-primary/20 font-medium"
-        >
-          <span className="flex items-center gap-2">
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
-            New Chat
-          </span>
+    <div className="flex flex-col h-full bg-[var(--bg-surface)]">
+      <div className="p-4 sticky top-0 bg-[var(--bg-surface)] z-10">
+        <button onClick={startNewChat} className="w-full flex items-center justify-between px-4 py-2.5 bg-blue-500/10 hover:bg-blue-500/20 text-blue-500 rounded-xl transition-all border border-blue-500/20 font-medium active:scale-[0.98]">
+          <span className="flex items-center gap-2 text-sm"><Plus className="w-4 h-4" /> {t.newChat}</span>
         </button>
       </div>
-
-      <div className="flex-1 overflow-y-auto px-2 pb-4 space-y-6">
-        {Object.entries(groupedChats).map(([label, groupChats]) => (
-          groupChats.length > 0 && (
-            <div key={label} className="mb-4">
-              <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider px-3 mb-2">
-                {label}
-              </h3>
+      <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-4">
+        {chats.length === 0 ? (
+          <p className="text-xs text-[var(--text-secondary)] px-2">{t.noChats}</p>
+        ) : (
+          Object.entries(groups).map(([label, list]) => list.length > 0 && (
+            <div key={label} className="mb-3">
+              <h3 className="text-[11px] font-semibold text-[var(--text-secondary)] uppercase tracking-wider px-2 mb-1.5">{label}</h3>
               <div className="space-y-1">
-                {groupChats.map(chat => (
-                  <div key={chat.id} className="relative group" ref={menuOpenId === chat.id ? menuRef : null}>
-                    <button
-                      onClick={() => loadChat(chat.id)}
-                      className={`w-full text-left px-3 py-2 rounded-lg transition-colors flex items-center justify-between ${activeChatId === chat.id
-                          ? 'bg-gray-800 text-gray-100'
-                          : 'text-gray-400 hover:bg-gray-800/50 hover:text-gray-200'
-                        }`}
-                    >
-                      {editingId === chat.id ? (
-                        <input
-                          autoFocus
-                          value={editTitle}
-                          onChange={(e) => setEditTitle(e.target.value)}
-                          onBlur={() => handleRenameSubmit(chat.id)}
-                          onKeyDown={(e) => e.key === 'Enter' && handleRenameSubmit(chat.id)}
-                          className="bg-black border border-primary text-gray-100 px-2 py-0.5 rounded text-sm w-full outline-none"
-                          onClick={(e) => e.stopPropagation()}
-                        />
+                {list.map(c => (
+                  <div key={c.id} className="relative group" ref={menuOpenId === c.id ? menuRef : null}>
+                    <button onClick={() => loadChat(c.id)} className={`w-full text-left px-3 py-2 rounded-lg transition-colors flex items-center justify-between ${activeChatId === c.id ? 'bg-blue-500/15 text-blue-500 font-medium' : 'text-[var(--text-secondary)] hover:bg-[var(--border-dim)] hover:text-[var(--text-primary)]'}`}>
+                      {editingId === c.id ? (
+                        <input autoFocus value={editTitle} onChange={e => setEditTitle(e.target.value)} onBlur={() => handleRename(c.id)} onKeyDown={e => e.key === 'Enter' && handleRename(c.id)} className="bg-[var(--bg-background)] border border-blue-500 text-[var(--text-primary)] px-2 py-0.5 rounded text-sm w-full outline-none" onClick={e => e.stopPropagation()} />
                       ) : (
-                        <span className="truncate text-sm pr-4">
-                          {chat.title || 'New Chat'}
-                        </span>
+                        <span className="truncate text-sm pr-2 flex items-center gap-2"><MessageSquare className="w-3.5 h-3.5 opacity-70" /> {c.title}</span>
                       )}
-
-                      {/* Kebab Menu Button (visible on hover or when active) */}
                       {!editingId && (
-                        <div
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setMenuOpenId(menuOpenId === chat.id ? null : chat.id);
-                          }}
-                          className={`p-1 rounded hover:text-white transition-opacity ${menuOpenId === chat.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z" /></svg>
+                        <div onClick={e => { e.stopPropagation(); setMenuOpenId(menuOpenId === c.id ? null : c.id); }} className={`p-1 rounded hover:text-[var(--text-primary)] transition-opacity ${menuOpenId === c.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+                          <MoreVertical className="w-4 h-4" />
                         </div>
                       )}
                     </button>
-
-                    {/* Dropdown Menu */}
-                    {menuOpenId === chat.id && (
-                      <div className="absolute right-2 top-10 w-32 bg-gray-900 border border-gray-700 rounded-lg shadow-xl py-1 z-50">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setEditTitle(chat.title);
-                            setEditingId(chat.id);
-                            setMenuOpenId(null);
-                          }}
-                          className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-gray-800 flex items-center gap-2"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg>
-                          Rename
-                        </button>
-                        <button
-                          onClick={(e) => handleDelete(chat.id, e)}
-                          className="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-gray-800 flex items-center gap-2"
-                        >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                          Delete
-                        </button>
+                    {menuOpenId === c.id && (
+                      <div className="absolute right-2 top-8 w-32 bg-[var(--bg-surface)] border border-[var(--border-dim)] rounded-lg shadow-xl py-1 z-50">
+                        <button onClick={e => { e.stopPropagation(); setEditTitle(c.title); setEditingId(c.id); setMenuOpenId(null); }} className="w-full text-left px-4 py-2 text-xs text-[var(--text-primary)] hover:bg-[var(--border-dim)] flex items-center gap-2"><Edit2 className="w-3.5 h-3.5" /> Rename</button>
+                        <button onClick={e => handleDelete(c.id, e)} className="w-full text-left px-4 py-2 text-xs text-red-500 hover:bg-[var(--border-dim)] flex items-center gap-2"><Trash2 className="w-3.5 h-3.5" /> Delete</button>
                       </div>
                     )}
                   </div>
                 ))}
               </div>
             </div>
-          )
-        ))}
+          ))
+        )}
       </div>
     </div>
   );

@@ -95,16 +95,24 @@ class Repository:
     def delete_chunks(self, doc_id: str) -> None:
         self.db.table("chunks").delete().eq("document_id", doc_id).execute()
 
-    # ---- search ----------------------------------------------------
+    # ---- search -----------------------------------------
     def hybrid_search(
-        self, query_text: str, embedding: list[float], match_limit: int = 5
+        self,
+        query_text: str,
+        embedding: list[float],
+        match_limit: int = 5,
+        filter_doc_ids: list[str] | None = None
     ) -> list[dict]:
-        res = self.db.rpc(
-            "hybrid_search",
-            {
-                "query_text": query_text,
-                "query_embedding": embedding,
-                "match_limit": match_limit,
-            },
-        ).execute()
+
+        payload = {
+            "query_text": query_text,
+            "query_embedding": embedding,
+            "match_limit": match_limit,
+        }
+
+        # If the user selected specific documents in the UI, pass them to Supabase
+        if filter_doc_ids:
+            payload["filter_doc_ids"] = filter_doc_ids
+
+        res = self.db.rpc("hybrid_search", payload).execute()
         return res.data or []

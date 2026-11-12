@@ -1,6 +1,7 @@
+@import "tailwindcss";
+
 @layer base {
   :root {
-    /* Light Theme */
     --bg-background: #ffffff;
     --bg-surface: #f8fafc;
     --border-dim: #e2e8f0;
@@ -12,7 +13,6 @@
   }
 
   .dark {
-    /* Dark Theme */
     --bg-background: #0f1115;
     --bg-surface: #181b21;
     --border-dim: #272b33;
@@ -29,4 +29,22 @@
     -webkit-font-smoothing: antialiased;
     transition: background-color 0.3s ease, color 0.3s ease;
   }
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-dim);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
 }
