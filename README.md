@@ -2,7 +2,6 @@
 
 Chat with your business documents, with sources you can verify.
 
-> **Status:** step 1 of 7. Schema, ingestion, and a search inspector are done. No LLM answers yet (that's step 3). Right now you can upload documents, have them chunked and embedded, and see what hybrid search retrieves for a question.
 
 ## How it works
 
