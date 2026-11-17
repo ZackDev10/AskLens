@@ -1,10 +1,14 @@
-import { useState, useRef, useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
+
+const API_BASE = import.meta.env.VITE_API_URL || '/api';
 
 export interface Source {
+  id?: string;
+  document_id?: string;
   title: string;
   page: number;
   content: string;
-  score: number;
+  score?: number;
 }
 
 export interface Message {
@@ -39,10 +43,22 @@ export const useChatStream = () => {
     }
   }, []);
 
-  const saveChats = (newChats: Record<string, Chat>) => {
-    setChats(newChats);
-    localStorage.setItem('asklens_chats', JSON.stringify(newChats));
-    window.dispatchEvent(new Event('storage'));
+  const persistChat = (chatId: string, title: string, chatMessages: Message[]) => {
+    setChats(prev => {
+      const existing = prev[chatId];
+      const next = {
+        ...prev,
+        [chatId]: {
+          id: chatId,
+          title: existing?.title || title,
+          updated_at: new Date().toISOString(),
+          messages: chatMessages,
+        },
+      };
+      localStorage.setItem('asklens_chats', JSON.stringify(next));
+      window.dispatchEvent(new Event('storage'));
+      return next;
+    });
   };
 
   const startNewChat = () => {
@@ -52,9 +68,11 @@ export const useChatStream = () => {
   };
 
   const loadChat = (id: string) => {
-    if (chats[id]) {
+    const stored = localStorage.getItem('asklens_chats');
+    const latestChats = stored ? JSON.parse(stored) : chats;
+    if (latestChats[id]) {
       setActiveChatId(id);
-      setMessages(chats[id].messages);
+      setMessages(latestChats[id].messages);
       setStatusText('');
     }
   };
@@ -81,16 +99,16 @@ export const useChatStream = () => {
     const updatedMessages = [...messages, newMsg];
     setMessages(updatedMessages);
     setIsStreaming(true);
-    setStatusText('Initiating...');
+    setStatusText(lang === 'fr' ? 'Initialisation...' : 'Initiating...');
 
     abortControllerRef.current = new AbortController();
 
     try {
-      const res = await fetch(import.meta.env.VITE_API_URL + '/chat', {
+      const res = await fetch(`${API_BASE}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ query, document_ids: documentIds, lang }),
-        signal: abortControllerRef.current.signal
+        signal: abortControllerRef.current.signal,
       });
 
       if (!res.ok) throw new Error(`HTTP Error: ${res.status}`);
@@ -98,48 +116,52 @@ export const useChatStream = () => {
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
+      let buffer = '';
       let assistantMsg: Message = { role: 'assistant', content: '', sources: [] };
       setMessages([...updatedMessages, assistantMsg]);
+
+      const processLine = (line: string) => {
+        if (!line.trim()) return;
+        try {
+          const parsed = JSON.parse(line);
+          if (parsed.event === 'status') {
+            setStatusText(parsed.data);
+          } else if (parsed.event === 'message') {
+            setStatusText('');
+            assistantMsg = { ...assistantMsg, content: assistantMsg.content + parsed.data };
+            setMessages([...updatedMessages, assistantMsg]);
+          } else if (parsed.event === 'sources') {
+            assistantMsg = { ...assistantMsg, sources: Array.isArray(parsed.data) ? parsed.data : [] };
+            setMessages([...updatedMessages, assistantMsg]);
+          } else if (parsed.event === 'error') {
+            setStatusText('');
+            setMessages([...updatedMessages, { role: 'error', content: parsed.data }]);
+          }
+        } catch (e) {
+          console.error('JSON Parse error on stream line:', line, e);
+        }
+      };
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk.split('\n');
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        // Keep the last potentially incomplete line in the buffer until the next chunk
+        buffer = lines.pop() ?? '';
 
         for (const line of lines) {
-          if (!line.trim()) continue;
-          try {
-            const parsed = JSON.parse(line);
-            if (parsed.event === 'status') {
-              setStatusText(parsed.data);
-            } else if (parsed.event === 'message') {
-              setStatusText('');
-              assistantMsg.content += parsed.data;
-              setMessages([...updatedMessages, { ...assistantMsg }]);
-            } else if (parsed.event === 'sources') {
-              assistantMsg.sources = parsed.data;
-              setMessages([...updatedMessages, { ...assistantMsg }]);
-            } else if (parsed.event === 'error') {
-              setStatusText('');
-              setMessages([...updatedMessages, { role: 'error', content: parsed.data }]);
-            }
-          } catch (e) {
-            console.error('JSON Parse error on stream', line);
-          }
+          processLine(line);
         }
       }
 
-      const finalChats = { ...chats };
-      finalChats[chatId] = {
-        id: chatId,
-        title: finalChats[chatId]?.title || query.slice(0, 40),
-        updated_at: new Date().toISOString(),
-        messages: [...updatedMessages, assistantMsg]
-      };
-      saveChats(finalChats);
+      // Flush any remaining buffered line when stream closes
+      if (buffer.trim()) {
+        processLine(buffer);
+      }
 
+      persistChat(chatId, query.slice(0, 40), [...updatedMessages, assistantMsg]);
     } catch (err: any) {
       if (err.name === 'AbortError') {
         setStatusText('Stopped');

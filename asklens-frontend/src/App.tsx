@@ -1,5 +1,6 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { Toaster } from 'react-hot-toast';
+import { AlertCircle, Bot, Check, Copy, FileText, Menu, Moon, RefreshCw, Search, Send, Square, Sun, ThumbsDown, ThumbsUp } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import toast, { Toaster } from 'react-hot-toast';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
@@ -8,8 +9,6 @@ import { ChatSidebar } from './components/ChatSidebar';
 import { DocumentSidebar } from './components/DocumentSidebar';
 import { FileUploader } from './components/FileUploader';
 import { useChatStream } from './hooks/useChatStream';
-import { Copy, Check, ThumbsUp, ThumbsDown, RefreshCw, Bot, Send, Square, Menu, Search, FileText, AlertCircle, Sun, Moon } from 'lucide-react';
-import toast from 'react-hot-toast';
 
 const translations: Record<string, any> = {
     en: {
@@ -126,28 +125,63 @@ const MarkdownRenderers = (t: any) => ({
     h3: ({ node, ...props }: any) => <h3 className="text-base font-bold mb-2 mt-3" {...props} />,
 });
 
-const SourceChips = ({ sources, t }: { sources: any[], t: any }) => {
+const SourceChips = ({ sources, t }: { sources: any[]; t: any }) => {
+    const [expandedSrc, setExpandedSrc] = useState<any | null>(null);
+
     const grouped = sources.reduce((acc: any, src: any) => {
-        if (!acc[src.title]) acc[src.title] = [];
-        acc[src.title].push(src);
+        const docTitle = src.title || t.untitledDoc || 'Document';
+        if (!acc[docTitle]) acc[docTitle] = [];
+        acc[docTitle].push(src);
         return acc;
     }, {});
 
     return (
         <div className="mt-4 pt-4 border-t border-[var(--border-dim)]">
-            <p className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-2">{t.sources}</p>
+            <p className="text-xs font-semibold text-[var(--text-secondary)] uppercase tracking-wider mb-2">
+                {t.sources}
+            </p>
             <div className="flex flex-wrap gap-2">
                 {Object.entries(grouped).map(([title, srcs]: any) => {
-                    const pages = Array.from(new Set(srcs.map((s: any) => s.page))).sort((a: any, b: any) => a - b).join(', ');
+                    const sortedSrcs = [...srcs].sort((a: any, b: any) => (a.page || 1) - (b.page || 1));
+                    const pages = Array.from(new Set(sortedSrcs.map((s: any) => s.page || 1))).join(', ');
+                    const isSelected = expandedSrc?.title === title;
+
                     return (
-                        <div key={title} title={title} className="flex items-center gap-1.5 text-[11px] font-medium bg-[var(--bg-surface)] text-[var(--text-primary)] px-3 py-1.5 rounded-lg border border-[var(--border-dim)] cursor-pointer hover:border-gray-400 transition-colors shadow-sm">
-                            <FileText className="w-3.5 h-3.5 text-blue-500" />
-                            <span className="truncate max-w-[140px]">{title}</span>
-                            <span className="text-[var(--text-secondary)] opacity-75">· p.{pages}</span>
-                        </div>
+                        <button
+                            key={title}
+                            type="button"
+                            title={title}
+                            onClick={() => setExpandedSrc(isSelected ? null : sortedSrcs[0])}
+                            className={`flex items-center gap-1.5 text-[11px] font-medium px-3 py-1.5 rounded-lg border transition-colors shadow-sm ${isSelected
+                                    ? 'bg-blue-500/10 border-blue-500/50 text-blue-500'
+                                    : 'bg-[var(--bg-surface)] text-[var(--text-primary)] border-[var(--border-dim)] hover:border-blue-500/40'
+                                }`}
+                        >
+                            <FileText className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                            <span className="truncate max-w-[160px]">{title}</span>
+                            <span className="text-[var(--text-secondary)] opacity-80">· p.{pages}</span>
+                        </button>
                     );
                 })}
             </div>
+
+            {expandedSrc && (
+                <div className="mt-3 p-3 rounded-xl bg-[var(--bg-background)] border border-[var(--border-dim)] text-xs text-[var(--text-secondary)] space-y-1.5">
+                    <div className="flex items-center justify-between font-semibold text-[var(--text-primary)]">
+                        <span className="truncate pr-2">
+                            {expandedSrc.title} — Page {expandedSrc.page || 1}
+                        </span>
+                        <button
+                            type="button"
+                            onClick={() => setExpandedSrc(null)}
+                            className="text-[11px] text-blue-500 hover:underline shrink-0"
+                        >
+                            ✕
+                        </button>
+                    </div>
+                    <p className="leading-relaxed whitespace-pre-line line-clamp-4">{expandedSrc.content}</p>
+                </div>
+            )}
         </div>
     );
 };
